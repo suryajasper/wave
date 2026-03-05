@@ -773,31 +773,39 @@ def testScaledGemmMXFP4AsymmetricScheduleBF16(
 @require_e2e
 @require_cdna4
 @pytest.mark.parametrize(
-    "shape",
-    [(1024, 1024, 8192)],
-)
-@pytest.mark.parametrize(
-    "block_shape",
-    [(256, 256, 256), (64, 192, 256)],
+    "shape, block_shape, wave_shape",
+    [
+        ((1024, 1024, 8192), (256, 256, 256), (1, 4)),
+        ((1024, 1024, 8192), (64, 192, 256), (1, 4)),
+        ((32 * 32, 32 * 64, 16384), (32, 64, 256), (1, 4)),
+    ],
 )
 @pytest.mark.parametrize(
     "mfma_variant",
     [ScaledMMAType.F32_16x16x128_F8F6F4],
 )
+@param_bool("dynamic_shapes", "dyn")
 @use_water_backend_bool("use_water_backend")
 def testScaledGemmMXFP4PreshuffleB(
     shape: tuple[int, int, int],
     block_shape: tuple[int, int, int],
+    wave_shape: tuple[int, int],
     mfma_variant: ScaledMMAType,
+    dynamic_shapes: bool,
     use_water_backend: bool,
 ):
     """End-to-end test for MXFP4 GEMM with preshuffled B data and B scales."""
     gemm, options = get_tagged_mxfp4_gemm_preshuffle_b(
         shape,
         block_shape,
-        wave_shape=(1, 4),
+        wave_shape=wave_shape,
         mfma_variant=mfma_variant,
     )
+    if dynamic_shapes:
+        for sym in [tkl.sym.M, tkl.sym.N, tkl.sym.K]:
+            del options.subs[sym]
+        options.dynamic_symbols = [tkl.sym.M, tkl.sym.N, tkl.sym.K]
+        options.wave_runtime = True
     schedule = get_mxfp4_asymmetric_schedule()
     options.minimize_shared_allocs = True
     options.linearize_shared_access = True
