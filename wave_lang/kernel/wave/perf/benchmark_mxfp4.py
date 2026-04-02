@@ -833,13 +833,14 @@ def parse_args():
 def validate_shape_and_macrotiles(
     shape: tuple[int, int, int],
     macrotiles: tuple[int, int, int],
+    dynamic: bool = False,
 ) -> None:
     """Validate shape and macrotile combination. Raises ValueError with a reason if invalid."""
     M, N, K = shape
     mt_m, mt_n, mt_k = macrotiles
     if M <= 4 or N <= 4 or K <= 4:
         raise ValueError(f"M, N, K must be > 4 (got M={M}, N={N}, K={K})")
-    if mt_m > M or mt_n > N or mt_k > K:
+    if not dynamic and (mt_m > M or mt_n > N or mt_k > K):
         raise ValueError(
             f"Macrotiles must not exceed shape dimensions: "
             f"MT_M({mt_m})<=M({M}), MT_N({mt_n})<=N({N}), MT_K({mt_k})<=K({K})"
@@ -858,6 +859,7 @@ def validate_shape_and_macrotiles(
 
 def load_shapes_csv(
     path: Path,
+    dynamic: bool = False,
 ) -> list[tuple[tuple[int, int, int], tuple[int, int, int]]]:
     """Load shape (M,N,K) and macrotile sizes (MT_M, MT_N, MT_K) from CSV.
     Validates each row with validate_shape_and_macrotiles; raises ValueError on first invalid row.
@@ -875,7 +877,7 @@ def load_shapes_csv(
             shape = (M, N, K)
             macrotiles = (MT_M, MT_N, MT_K)
             try:
-                validate_shape_and_macrotiles(shape, macrotiles)
+                validate_shape_and_macrotiles(shape, macrotiles, dynamic=dynamic)
             except ValueError as e:
                 raise ValueError(f"{path}: row {row_idx}: {e}") from e
             rows.append((shape, macrotiles))
@@ -913,12 +915,12 @@ def _run_compile_only_worker(args) -> None:
 
     shape = tuple(args._shape)
     macrotiles = tuple(args._tiles)
-    validate_shape_and_macrotiles(shape, macrotiles)
+    dynamic = args._dynamic
+    validate_shape_and_macrotiles(shape, macrotiles, dynamic=dynamic)
 
     asm_dir = args._co_asm_dir.resolve()
     dump_dir = args._co_dump_dir.resolve()
     asm_dir.mkdir(parents=True, exist_ok=True)
-    dynamic = args._dynamic
     num_splits = args.num_splits
     backend = args.backend
 
@@ -1129,7 +1131,7 @@ def main():
         sys.exit(1)
 
     try:
-        shape_rows = load_shapes_csv(args.shapes)
+        shape_rows = load_shapes_csv(args.shapes, dynamic=args.dynamic)
     except ValueError as e:
         print(f"Invalid shape/macrotile in CSV: {e}", file=sys.stderr)
         sys.exit(1)
